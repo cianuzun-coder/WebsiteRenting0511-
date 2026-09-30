@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mietwagen Einweisung</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;700;800&display=swap">
+<style>
+/* Layout: one 16:9 stage like a TV screen, a slim control strip beneath it. The stage keeps its own
+   cartoon colours in every theme; the chrome around it follows the viewer's theme. */
+:root {
+  --bg: #eef1f6;          /* chrome ground, cool grey with a blue bias */
+  --fg: #172033;
+  --muted: #5b667a;
+  --panel: #ffffff;
+  --line: #d3d9e4;
+  --accent: #ff7a1a;      /* signal orange, the brand colour of the rental desk */
+  --accent-ink: #1a1206;
+  --ok: #2fa36b;
+  --danger: #e03a3a;
+  --font-display: "Fredoka", "Arial Rounded MT Bold", "Nunito", system-ui, sans-serif;
+  --font-body: "Nunito", "Segoe UI", system-ui, sans-serif;
+  --u: 10px;              /* stage unit, set by script: stage width / 100 */
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141d; --fg: #eef1f6; --muted: #98a3b8; --panel: #18202d; --line: #2a3446;
+    --accent: #ff8a33; --accent-ink: #1a1206; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141d; --fg: #eef1f6; --muted: #98a3b8; --panel: #18202d; --line: #2a3446;
+  --accent: #ff8a33; --accent-ink: #1a1206; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body);
+  display: flex; flex-direction: column; align-items: center; padding-block: 12px; padding-inline: 16px;
+  min-height: 100%;
+}
+.app { width: 100%; max-width: 1600px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.app:fullscreen { background: #000; max-width: none; padding: 0; justify-content: center; gap: 0; }
+.app:fullscreen .controls, .app:fullscreen .scenes-nav { display: none; }
+.app:fullscreen.show-ui .controls { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: rgba(15,20,29,.92); color: #eef1f6; --fg: #eef1f6; --panel: #18202d; --line: #2a3446; --muted: #98a3b8; }
+
+/* ---------- Stage ---------- */
+.stage {
+  position: relative; width: min(100%, calc((100vh - 170px) * 16 / 9)); max-width: 100%;
+  aspect-ratio: 16 / 9; overflow: hidden; border-radius: 18px; background: #7fc8ff;
+  box-shadow: 0 20px 60px rgba(10,20,40,.25); font-size: calc(var(--u) * 2.1); user-select: none;
+  outline: none;
+}
+.app:fullscreen .stage { width: min(100vw, calc(100vh * 16 / 9)); border-radius: 0; box-shadow: none; }
+.stage svg.world { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.stage video.clip { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; z-index: 0; }
+.stage.has-clip video.clip { display: block; }
+.stage.has-clip svg.world { z-index: 1; }
+.stage.has-clip svg.world .bg { display: none; }
+
+.chip {
+  position: absolute; top: calc(var(--u) * 3); left: calc(var(--u) * 3); z-index: 3;
+  display: flex; align-items: center; gap: calc(var(--u) * 1.2);
+  background: rgba(23,32,51,.82); color: #fff; border-radius: 999px;
+  padding: calc(var(--u) * .9) calc(var(--u) * 2.2) calc(var(--u) * .9) calc(var(--u) * 1.2);
+  font-family: var(--font-display); font-weight: 600; font-size: calc(var(--u) * 2.2); letter-spacing: .01em;
+}
+.chip .num { background: var(--accent); color: var(--accent-ink); border-radius: 999px; min-width: calc(var(--u) * 3.6); height: calc(var(--u) * 3.6); display: grid; place-items: center; font-variant-numeric: tabular-nums; }
+.brand { position: absolute; top: calc(var(--u) * 3); right: calc(var(--u) * 3); z-index: 3; font-family: var(--font-display); font-weight: 700; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.25); font-size: calc(var(--u) * 2.6); }
+
+.bubble {
+  position: absolute; z-index: 4; max-width: calc(var(--u) * 46); background: #fff; color: #172033;
+  border-radius: calc(var(--u) * 2.4); padding: calc(var(--u) * 1.8) calc(var(--u) * 2.4);
+  font-size: calc(var(--u) * 2.35); line-height: 1.3; font-weight: 700; box-shadow: 0 8px 24px rgba(10,20,40,.22);
+  opacity: 0; transform: translateY(8px) scale(.96); transition: opacity .25s, transform .25s; text-wrap: pretty;
+}
+.bubble.show { opacity: 1; transform: none; }
+.bubble::after { content: ""; position: absolute; bottom: calc(var(--u) * -1.6); width: 0; height: 0; border: calc(var(--u) * 1.7) solid transparent; border-top-color: #fff; border-bottom: 0; }
+.bubble.agent { left: calc(var(--u) * 6); top: calc(var(--u) * 12); }
+.bubble.agent::after { left: calc(var(--u) * 6); }
+.bubble.customer { right: calc(var(--u) * 6); top: calc(var(--u) * 12); }
+.bubble.customer::after { right: calc(var(--u) * 6); }
+.bubble .who { display: block; font-family: var(--font-display); font-weight: 600; font-size: calc(var(--u) * 1.6); color: var(--accent); letter-spacing: .04em; text-transform: uppercase; margin-bottom: calc(var(--u) * .4); }
+.bubble.customer .who { color: #2a7de1; }
+
+.prop { position: absolute; z-index: 2; left: 50%; top: 40%; width: calc(var(--u) * 26); height: calc(var(--u) * 26); transform: translate(-50%, -50%) scale(.6); opacity: 0; transition: transform .45s cubic-bezier(.2,1.4,.4,1), opacity .3s; }
+.prop.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.prop svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+.subtitle {
+  position: absolute; z-index: 5; left: 50%; bottom: calc(var(--u) * 4.2); transform: translateX(-50%);
+  max-width: 86%; background: rgba(23,32,51,.86); color: #fff; padding: calc(var(--u) * .9) calc(var(--u) * 2);
+  border-radius: calc(var(--u) * 1); font-size: calc(var(--u) * 2.1); font-weight: 700; text-align: center; line-height: 1.3; text-wrap: balance;
+}
+.subtitle:empty { display: none; }
+.progress { position: absolute; z-index: 5; left: 0; right: 0; bottom: 0; height: calc(var(--u) * 1.1); display: flex; gap: 3px; padding: 0 3px 3px; }
+.progress span { flex: 1; background: rgba(255,255,255,.35); border-radius: 3px; overflow: hidden; }
+.progress span i { display: block; height: 100%; width: 0; background: var(--accent); }
+.progress span.done i { width: 100%; }
+
+.mouth { transform-origin: center; transform-box: fill-box; }
+.talking .mouth { animation: talk .22s ease-in-out infinite alternate; }
+@keyframes talk { from { transform: scaleY(.25); } to { transform: scaleY(1.15); } }
+.eye { transform-origin: center; transform-box: fill-box; animation: blink 4.6s infinite; }
+.customer-fig .eye { animation-delay: 1.9s; }
+@keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.08); } }
+.bob { animation: bob 3.2s ease-in-out infinite; transform-origin: bottom center; transform-box: fill-box; }
+.customer-fig .bob { animation-delay: 1.4s; }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.talking .arm-r { animation: wave 1.2s ease-in-out infinite; transform-origin: top left; transform-box: fill-box; }
+@keyframes wave { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-14deg); } }
+.blink-light { animation: siren .5s steps(2) infinite; }
+@keyframes siren { 50% { opacity: .2; } }
+.spin-slow { animation: spin 6s linear infinite; transform-origin: center; transform-box: fill-box; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.shake { animation: shake .5s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes shake { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+
+.overlay {
+  position: absolute; inset: 0; z-index: 10; display: grid; place-items: center; text-align: center;
+  background: rgba(15,20,29,.72); color: #fff; padding: calc(var(--u) * 4);
+}
+.overlay[hidden] { display: none; }
+.overlay h1 { font-family: var(--font-display); font-weight: 700; font-size: calc(var(--u) * 6); margin: 0 0 calc(var(--u) * 1); line-height: 1.05; text-wrap: balance; }
+.overlay p { font-size: calc(var(--u) * 2.4); margin: 0 0 calc(var(--u) * 3); max-width: 60ch; opacity: .9; }
+.overlay .big { font-family: var(--font-display); font-weight: 700; font-size: calc(var(--u) * 4.5); color: var(--accent); margin-bottom: calc(var(--u) * 2); font-variant-numeric: tabular-nums; }
+.btn-primary {
+  font: inherit; font-family: var(--font-display); font-weight: 700; font-size: calc(var(--u) * 3); cursor: pointer;
+  background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 999px; padding: calc(var(--u) * 1.6) calc(var(--u) * 5);
+  box-shadow: 0 10px 30px rgba(255,122,26,.45);
+}
+.btn-primary:focus-visible, .controls button:focus-visible, .scenes-nav button:focus-visible, .stage:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+/* ---------- Controls ---------- */
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; width: 100%; padding: 8px 12px; }
+.controls button, .controls label {
+  font: inherit; font-weight: 700; font-size: 15px; color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 9px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; min-height: 42px;
+}
+.controls button:hover { border-color: var(--accent); }
+.controls button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; min-width: 120px; justify-content: center; }
+.controls .kbd { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; font-variant-numeric: tabular-nums; }
+.controls .hint { width: 100%; text-align: center; color: var(--muted); font-size: 13px; }
+.scenes-nav { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 1100px; }
+.scenes-nav button { font: inherit; font-size: 13px; font-weight: 700; background: var(--panel); color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; cursor: pointer; }
+.scenes-nav button[aria-current="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+@media (max-width: 600px) { .controls .kbd { display: none; } .controls button, .controls label { font-size: 14px; padding: 8px 10px; } }
+@media (prefers-reduced-motion: reduce) { .bob, .eye, .spin-slow, .shake, .blink-light { animation: none; } }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="stage" id="stage" tabindex="0" aria-label="Einweisungsvideo">
+    <svg class="world" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fb8ff"/><stop offset="1" stop-color="#c9ecff"/></linearGradient>
+        <linearGradient id="road" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a5261"/><stop offset="1" stop-color="#2e3440"/></linearGradient>
+      </defs>
+      <g class="bg"><rect width="1600" height="900" fill="url(#sky)"/>
+      <g fill="#fff" opacity=".9">
+        <ellipse cx="260" cy="150" rx="90" ry="34"/><ellipse cx="320" cy="130" rx="70" ry="40"/>
+        <ellipse cx="1240" cy="120" rx="110" ry="36"/><ellipse cx="1310" cy="100" rx="70" ry="42"/>
+      </g>
+      <circle cx="1440" cy="130" r="60" fill="#ffd94a"/>
+      <!-- office building -->
+      <g>
+        <rect x="90" y="330" width="560" height="330" rx="10" fill="#f4efe6"/>
+        <rect x="90" y="300" width="560" height="60" rx="10" fill="#ff7a1a"/>
+        <text x="370" y="345" text-anchor="middle" font-family="Fredoka, Arial Rounded MT Bold, sans-serif" font-weight="700" font-size="40" fill="#1a1206" id="signText">AUTOVERMIETUNG</text>
+        <rect x="140" y="410" width="120" height="120" rx="8" fill="#9fdcff" stroke="#fff" stroke-width="8"/>
+        <rect x="300" y="410" width="120" height="120" rx="8" fill="#9fdcff" stroke="#fff" stroke-width="8"/>
+        <rect x="460" y="410" width="120" height="120" rx="8" fill="#9fdcff" stroke="#fff" stroke-width="8"/>
+        <rect x="300" y="560" width="120" height="100" rx="6" fill="#ffb066"/>
+      </g>
+      <!-- ground and road -->
+      <rect x="0" y="650" width="1600" height="250" fill="#7cc35c"/>
+      <path d="M0 720 H1600 V900 H0 Z" fill="url(#road)"/>
+      <g stroke="#ffd94a" stroke-width="10" stroke-dasharray="70 50"><path d="M0 810 H1600"/></g>
+      <!-- parked car -->
+      <g transform="translate(1080 560)">
+        <path d="M20 90 Q40 30 120 25 L260 25 Q330 30 360 80 L420 90 Q440 95 440 115 L440 140 H0 L0 115 Q0 95 20 90 Z" fill="#ff7a1a"/>
+        <path d="M70 85 Q90 45 130 42 L180 42 V85 Z" fill="#bfe9ff"/><path d="M200 42 L260 42 Q310 45 335 85 L200 85 Z" fill="#bfe9ff"/>
+        <circle cx="95" cy="140" r="32" fill="#222"/><circle cx="95" cy="140" r="14" fill="#ccc"/>
+        <circle cx="345" cy="140" r="32" fill="#222"/><circle cx="345" cy="140" r="14" fill="#ccc"/>
+        <rect x="425" y="98" width="15" height="14" rx="3" fill="#ffd94a"/>
+      </g>
+      </g>
+      <!-- agent (left) -->
+      <g class="agent-fig" id="agentFig" transform="translate(300 420)">
+        <g class="bob">
+          <path class="arm-r" d="M120 165 Q175 150 210 175" stroke="#ff7a1a" stroke-width="30" stroke-linecap="round" fill="none"/>
+          <path d="M40 165 Q0 190 -5 240" stroke="#ff7a1a" stroke-width="30" stroke-linecap="round" fill="none"/>
+          <rect x="40" y="150" width="90" height="140" rx="30" fill="#ff7a1a"/>
+          <rect x="40" y="280" width="38" height="110" rx="14" fill="#34405a"/><rect x="92" y="280" width="38" height="110" rx="14" fill="#34405a"/>
+          <rect x="34" y="380" width="52" height="24" rx="10" fill="#1a1206"/><rect x="86" y="380" width="52" height="24" rx="10" fill="#1a1206"/>
+          <rect x="52" y="150" width="66" height="60" rx="20" fill="#fff" opacity=".95"/>
+          <rect x="60" y="175" width="50" height="18" rx="4" fill="#ffd94a"/>
+          <circle cx="85" cy="90" r="62" fill="#f6c9a0"/>
+          <path d="M23 80 Q30 10 90 22 Q150 10 147 85 Q140 60 90 58 Q40 58 23 80 Z" fill="#4a2c1a"/>
+          <circle cx="60" cy="96" r="7" fill="#1a1206" class="eye"/><circle cx="108" cy="96" r="7" fill="#1a1206" class="eye"/>
+          <path d="M50 78 Q60 72 70 78" stroke="#4a2c1a" stroke-width="4" fill="none" stroke-linecap="round"/>
+          <path d="M98 78 Q108 72 118 78" stroke="#4a2c1a" stroke-width="4" fill="none" stroke-linecap="round"/>
+          <ellipse class="mouth" cx="86" cy="124" rx="16" ry="9" fill="#a83d3d"/>
+          <circle cx="42" cy="118" r="8" fill="#f4a6a6" opacity=".7"/><circle cx="128" cy="118" r="8" fill="#f4a6a6" opacity=".7"/>
+        </g>
+      </g>
+      <!-- customer (right) -->
+      <g class="customer-fig" id="customerFig" transform="translate(1310 420)">
+        <g class="bob">
+          <path class="arm-r" d="M50 165 Q-5 150 -40 175" stroke="#2a7de1" stroke-width="30" stroke-linecap="round" fill="none"/>
+          <path d="M130 165 Q170 190 175 240" stroke="#2a7de1" stroke-width="30" stroke-linecap="round" fill="none"/>
+          <rect x="40" y="150" width="90" height="140" rx="30" fill="#2a7de1"/>
+          <rect x="40" y="280" width="38" height="110" rx="14" fill="#5b6b8a"/><rect x="92" y="280" width="38" height="110" rx="14" fill="#5b6b8a"/>
+          <rect x="34" y="380" width="52" height="24" rx="10" fill="#fff"/><rect x="86" y="380" width="52" height="24" rx="10" fill="#fff"/>
+          <circle cx="85" cy="90" r="62" fill="#c98b5a"/>
+          <path d="M23 85 Q20 20 85 20 Q150 20 147 85 Q130 45 85 50 Q40 45 23 85 Z" fill="#1d1410"/>
+          <circle cx="60" cy="96" r="7" fill="#1a1206" class="eye"/><circle cx="108" cy="96" r="7" fill="#1a1206" class="eye"/>
+          <path d="M50 78 Q60 72 70 78" stroke="#1d1410" stroke-width="4" fill="none" stroke-linecap="round"/>
+          <path d="M98 78 Q108 72 118 78" stroke="#1d1410" stroke-width="4" fill="none" stroke-linecap="round"/>
+          <ellipse class="mouth" cx="86" cy="124" rx="16" ry="9" fill="#8f3a3a"/>
+          <rect x="52" y="215" width="66" height="8" rx="4" fill="#fff" opacity=".7"/>
+        </g>
+      </g>
+    </svg>
+
+    <video class="clip" id="clip" muted loop playsinline preload="auto"></video>
+    <div class="chip" id="chip"><span class="num" id="chipNum">1</span><span id="chipTitle">Willkommen</span></div>
+    <div class="brand" id="brand">Autovermietung</div>
+    <div class="prop" id="prop"></div>
+    <div class="bubble agent" id="bubbleAgent"><span class="who" id="agentName">Lena</span><span class="text"></span></div>
+    <div class="bubble customer" id="bubbleCustomer"><span class="who" id="customerName">Tom</span><span class="text"></span></div>
+    <div class="subtitle" id="subtitle"></div>
+    <div class="progress" id="progress"></div>
+
+    <div class="overlay" id="startOverlay">
+      <div>
+        <h1 id="startTitle">Herzlich willkommen</h1>
+        <p>Kurze Einweisung vor der Fahrt: Ablauf, Regeln, Gebühren und was im Notfall zu tun ist. Dauer etwa 5 Minuten.</p>
+        <button class="btn-primary" id="startBtn" type="button">▶ Video starten</button>
+      </div>
+    </div>
+    <div class="overlay" id="endOverlay" hidden>
+      <div>
+        <h1>Gute und sichere Fahrt!</h1>
+        <p>Bei Unfall, Panne, Schaden oder Fragen: sofort anrufen, Tag und Nacht.</p>
+        <div class="big" id="endPhone"></div>
+        <button class="btn-primary" id="replayBtn" type="button">↻ Nochmal abspielen</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls" id="controls">
+    <button type="button" id="prevBtn">⏮ Zurück <span class="kbd">←</span></button>
+    <button type="button" class="primary" id="playBtn">⏸ Pause <span class="kbd">Leertaste</span></button>
+    <button type="button" id="nextBtn">Weiter ⏭ <span class="kbd">→</span></button>
+    <button type="button" id="restartBtn">↻ Neustart <span class="kbd">R</span></button>
+    <button type="button" id="muteBtn">🔊 Ton <span class="kbd">M</span></button>
+    <label><input type="checkbox" id="loopChk"> Endlosschleife</label>
+    <button type="button" id="fsBtn">⛶ Vollbild <span class="kbd">F</span></button>
+    <div class="hint" id="voiceHint"></div>
+  </div>
+  <nav class="scenes-nav" id="scenesNav" aria-label="Szenen"></nav>
+</div>
+
+<script>
+/* =====================================================================
+   EINSTELLUNGEN: Firmenname, Telefonnummer und alle Gebühren hier anpassen.
+   Die Werte werden automatisch in alle Sprechtexte eingesetzt.
+   ===================================================================== */
+const CONFIG = {
+  company: "Autovermietung",     // Firmenname, erscheint auf dem Schild und im Text
+  phone: "0176 000 00 000",      // Notfall-Hotline (24 Stunden)
+  agentName: "Lena",             // Name der Mitarbeiterin
+  customerName: "Tom",           // Name des Kunden
+  deposit: "500",                // Kaution in Euro
+  kmIncluded: "200",             // Freikilometer pro Tag
+  kmFee: "35",                   // Cent pro Zusatzkilometer
+  fuelFee: "3",                  // Euro pro fehlendem Liter Kraftstoff
+  fuelService: "25",             // Servicepauschale Nachtanken in Euro
+  smokeFee: "250",               // Sonderreinigung bei Rauchgeruch in Euro
+  driftFee: "1.500",             // Vertragsstrafe bei Driften, Rennen, Missbrauch in Euro
+  dirtFee: "150",                // Reinigungspauschale bei grober Verschmutzung in Euro
+  deductible: "1.000",           // Selbstbeteiligung pro Schadensfall in Euro
+  lateFee: "25",                 // Verspätungsgebühr pro angefangener Stunde in Euro
+  lateDayHours: "3",             // ab so vielen Stunden Verspätung wird ein weiterer Miettag berechnet
+  pauseAfterLine: 500,           // Pause zwischen zwei Sprechblasen in Millisekunden
+  pauseAfterScene: 1400,         // Pause zwischen zwei Szenen in Millisekunden
+  speechRate: 0.98,              // Sprechgeschwindigkeit (1 = normal)
+  loop: false                    // true = läuft im Schaufenster endlos
+};
+
+/* Szenen und Dialog. {schlüssel} wird durch den Wert aus CONFIG ersetzt.
+   Optional pro Szene:  video: "clips/01-willkommen.mp4"  (Runway-Clip als Hintergrund, stumm, Endlosschleife)
+                        audio: "clips/01-willkommen.mp3"  (eingesprochene Tonspur statt Browserstimme)
+   Siehe runway-prompts.md. */
+const SCENES = [
+  { title: "Willkommen", prop: "wave", lines: [
+    ["agent", "Hallo und herzlich willkommen bei {company}! Ich bin {agentName} und erkläre dir in wenigen Minuten, wie deine Miete abläuft und worauf du achten musst."],
+    ["customer", "Super, dann leg mal los!"] ] },
+  { title: "Übergabe", prop: "clipboard", lines: [
+    ["agent", "Zuerst prüfen wir gemeinsam deinen Führerschein und deinen Personalausweis. Danach hinterlegst du die Kaution von {deposit} Euro."],
+    ["customer", "Und dann bekomme ich den Schlüssel?"],
+    ["agent", "Fast! Vorher gehen wir zusammen um das Auto und halten jeden Kratzer im Übergabeprotokoll fest, mit Fotos. Das schützt dich und uns."] ] },
+  { title: "Tank und Kilometer", prop: "odometer", lines: [
+    ["agent", "Du bekommst das Auto vollgetankt und gibst es vollgetankt zurück. Im Preis sind {kmIncluded} Kilometer pro Tag enthalten."],
+    ["customer", "Und wenn ich mehr fahre?"],
+    ["agent", "Jeder zusätzliche Kilometer kostet {kmFee} Cent. Fehlender Kraftstoff wird mit {fuelFee} Euro pro Liter plus {fuelService} Euro Servicepauschale berechnet."] ] },
+  { title: "Rauchverbot", prop: "nosmoke", lines: [
+    ["agent", "In allen unseren Fahrzeugen gilt absolutes Rauchverbot. Das gilt auch für E-Zigaretten, Vapes und Shisha."],
+    ["customer", "Und wenn es doch nach Rauch riecht?"],
+    ["agent", "Dann wird eine Sonderreinigung von {smokeFee} Euro fällig. Also bitte: nur draußen rauchen."] ] },
+  { title: "Driften verboten", prop: "nodrift", lines: [
+    ["agent", "Ganz wichtig: Driften, Burnouts, Rennen, Beschleunigungstests und Fahrten auf Rennstrecken sind strengstens verboten."],
+    ["customer", "Wie merkt ihr das überhaupt?"],
+    ["agent", "Über GPS-Daten, Reifenverschleiß und die Fahrzeugdiagnose. Bei Verstoß: Vertragsstrafe von {driftFee} Euro, volle Haftung für alle Schäden und sofortige Kündigung der Miete."] ] },
+  { title: "Weitere Regeln", prop: "rules", lines: [
+    ["agent", "Nur die im Vertrag eingetragenen Fahrer dürfen fahren. Null Alkohol und keine Drogen am Steuer. Fahrten ins Ausland nur mit unserer schriftlichen Genehmigung."],
+    ["customer", "Und Haustiere oder ein Umzug?"],
+    ["agent", "Haustiere nur nach Absprache und in einer Transportbox. Keine Transporte, die das Auto beschädigen oder stark verschmutzen können."] ] },
+  { title: "Verschmutzung", prop: "dirt", lines: [
+    ["agent", "Normale Gebrauchsspuren sind kein Problem. Grobe Verschmutzung ist etwas anderes: Sand, Schlamm, Essensreste, Flecken oder Tierhaare."],
+    ["customer", "Was passiert dann?"],
+    ["agent", "Dann berechnen wir eine Reinigungspauschale von {dirtFee} Euro. Bei hartnäckigen Flecken oder Gerüchen die tatsächlichen Reinigungskosten."] ] },
+  { title: "Schäden", prop: "damage", lines: [
+    ["agent", "Jeder neue Schaden, egal wie klein, muss sofort gemeldet werden. Mach Fotos und ruf uns an."],
+    ["customer", "Und wer bezahlt das?"],
+    ["agent", "Bis zur Selbstbeteiligung von {deductible} Euro du, darüber greift die Versicherung. Bei verschwiegenen Schäden oder grober Fahrlässigkeit haftest du in voller Höhe."] ] },
+  { title: "Unfall", prop: "accident", lines: [
+    ["agent", "Bei einem Unfall gilt: Ruhe bewahren, Warnblinker an, Warnweste anziehen und die Unfallstelle mit dem Warndreieck absichern."],
+    ["customer", "Und dann?"],
+    ["agent", "Immer die Polizei rufen, Notruf 110, auch bei kleinen Schäden. Ohne Polizeibericht kann die Versicherung die Zahlung ablehnen."] ] },
+  { title: "Unfallprotokoll", prop: "report", lines: [
+    ["agent", "Fülle mit dem anderen Fahrer das Europäische Unfallprotokoll aus. Es liegt im Handschuhfach. Namen, Kennzeichen, Versicherung und eine Skizze eintragen."],
+    ["customer", "Soll ich zugeben, dass ich schuld war?"],
+    ["agent", "Nein! Gib niemals ein Schuldanerkenntnis ab. Fotografiere alle Fahrzeuge, Kennzeichen und die Unfallstelle und notiere die Zeugen."] ] },
+  { title: "Sofort melden", prop: "phone", lines: [
+    ["agent", "Und danach rufst du uns sofort an, Tag und Nacht, unter {phone}. Das gilt bei jedem Vorfall: Unfall, Panne, Diebstahl, Strafzettel oder Warnleuchte."],
+    ["customer", "Also lieber einmal zu viel anrufen?"],
+    ["agent", "Genau. Wer uns nicht informiert, verliert den Versicherungsschutz und haftet selbst."] ] },
+  { title: "Rückgabe", prop: "clock", lines: [
+    ["agent", "Zur Rückgabe kommst du pünktlich zum vereinbarten Termin, mit vollem Tank und sauberem Innenraum. Wir kontrollieren das Auto gemeinsam und schließen das Rückgabeprotokoll ab."],
+    ["customer", "Und wenn ich später komme?"],
+    ["agent", "Jede angefangene Stunde Verspätung kostet {lateFee} Euro. Ab {lateDayHours} Stunden berechnen wir einen weiteren Miettag. Sag uns rechtzeitig Bescheid, dann finden wir eine Lösung."] ] },
+  { title: "Gute Fahrt", prop: "key", lines: [
+    ["agent", "Das war's! Alle Details stehen in unseren AGB, die du unterschrieben hast. Bei Fragen sind wir jederzeit für dich da."],
+    ["customer", "Danke, alles klar!"],
+    ["agent", "Dann wünschen wir dir eine gute und sichere Fahrt mit {company}!"] ] }
+];
+
+/* ---------- Requisiten (Illustrationen in der Bildmitte) ---------- */
+const NO = '<circle cx="100" cy="100" r="88" fill="none" stroke="#e03a3a" stroke-width="16"/><path d="M40 40 L160 160" stroke="#e03a3a" stroke-width="16" stroke-linecap="round"/>';
+const CAR = (color) => `<g><path d="M30 120 Q45 80 90 76 L150 76 Q185 80 200 108 L232 114 Q250 118 250 132 V150 H20 V132 Q20 122 30 120 Z" fill="${color}"/><path d="M78 108 Q90 84 112 82 L140 82 V108 Z" fill="#bfe9ff"/><path d="M150 82 L152 108 H196 Q185 88 150 82 Z" fill="#bfe9ff"/><circle cx="70" cy="150" r="22" fill="#222"/><circle cx="70" cy="150" r="9" fill="#ccc"/><circle cx="200" cy="150" r="22" fill="#222"/><circle cx="200" cy="150" r="9" fill="#ccc"/></g>`;
+const PROPS = {
+  wave: `<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="90" fill="#fff" opacity=".9"/><text x="100" y="128" text-anchor="middle" font-size="90">👋</text></svg>`,
+  clipboard: `<svg viewBox="0 0 200 200"><rect x="40" y="30" width="120" height="150" rx="10" fill="#fff" stroke="#34405a" stroke-width="6"/><rect x="75" y="18" width="50" height="26" rx="8" fill="#34405a"/><g stroke="#2fa36b" stroke-width="7" fill="none" stroke-linecap="round"><path d="M58 75 l10 10 l18 -20"/><path d="M58 110 l10 10 l18 -20"/><path d="M58 145 l10 10 l18 -20"/></g><g stroke="#c9d1de" stroke-width="7" stroke-linecap="round"><path d="M100 72 H140"/><path d="M100 107 H140"/><path d="M100 142 H140"/></g></svg>`,
+  odometer: `<svg viewBox="0 0 200 200"><circle cx="100" cy="110" r="85" fill="#172033"/><circle cx="100" cy="110" r="70" fill="#233049"/><g stroke="#fff" stroke-width="5" stroke-linecap="round"><path d="M45 130 l10 -6"/><path d="M60 92 l8 6"/><path d="M100 70 v10"/><path d="M140 92 l-8 6"/><path d="M155 130 l-10 -6"/></g><path class="shake" d="M100 110 L135 78" stroke="#ff7a1a" stroke-width="7" stroke-linecap="round"/><circle cx="100" cy="110" r="8" fill="#ff7a1a"/><rect x="60" y="135" width="80" height="28" rx="5" fill="#0d1220"/><text x="100" y="156" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="700" font-size="20" fill="#7cf0a8">${CONFIG.kmIncluded} km</text></svg>`,
+  nosmoke: `<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="88" fill="#fff"/><rect x="45" y="105" width="95" height="22" rx="4" fill="#f4efe6" stroke="#34405a" stroke-width="4"/><rect x="140" y="105" width="22" height="22" rx="3" fill="#ff7a1a"/><g stroke="#9aa5b8" stroke-width="5" fill="none" stroke-linecap="round"><path d="M50 90 q6 -14 0 -26"/><path d="M68 90 q6 -14 0 -26"/></g>${NO}</svg>`,
+  nodrift: `<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="88" fill="#fff"/><g transform="translate(-30 -10) rotate(-18 130 120)">${CAR('#ff7a1a')}</g><g stroke="#34405a" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="10 8"><path d="M30 170 q30 -20 60 0"/><path d="M45 185 q30 -20 60 0"/></g>${NO}</svg>`,
+  rules: `<svg viewBox="0 0 200 200"><rect x="30" y="20" width="140" height="160" rx="12" fill="#fff" stroke="#34405a" stroke-width="6"/><rect x="30" y="20" width="140" height="40" rx="12" fill="#ff7a1a"/><text x="100" y="48" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="700" font-size="22" fill="#1a1206">AGB</text><g stroke="#c9d1de" stroke-width="7" stroke-linecap="round"><path d="M50 85 H150"/><path d="M50 110 H150"/><path d="M50 135 H120"/><path d="M50 160 H140"/></g></svg>`,
+  dirt: `<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="88" fill="#fff"/><g transform="translate(-25 0)">${CAR('#ff7a1a')}</g><g fill="#7a4b21"><circle cx="60" cy="150" r="14"/><circle cx="95" cy="160" r="10"/><circle cx="130" cy="152" r="16"/><circle cx="165" cy="158" r="9"/><circle cx="110" cy="100" r="7"/><circle cx="45" cy="120" r="6"/></g></svg>`,
+  damage: `<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="88" fill="#fff"/><g transform="translate(-25 0)">${CAR('#ff7a1a')}</g><path d="M60 95 l12 10 l-8 12 l14 8" stroke="#172033" stroke-width="5" fill="none" stroke-linecap="round"/><g fill="#ffd94a" stroke="#e03a3a" stroke-width="5" stroke-linejoin="round"><path d="M150 30 l32 56 h-64 z"/></g><text x="150" y="80" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="700" font-size="34" fill="#172033">!</text></svg>`,
+  accident: `<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="88" fill="#fff"/><g transform="translate(-45 20) scale(.8)">${CAR('#ff7a1a')}</g><g transform="translate(90 20) scale(.8) scale(-1 1) translate(-260 0)">${CAR('#2a7de1')}</g><g transform="translate(100 60)"><rect x="-30" y="0" width="60" height="18" rx="6" fill="#172033"/><rect class="blink-light" x="-26" y="-14" width="24" height="16" rx="4" fill="#2a7de1"/><rect class="blink-light" x="2" y="-14" width="24" height="16" rx="4" fill="#e03a3a"/></g><text x="100" y="180" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="700" font-size="40" fill="#e03a3a">110</text></svg>`,
+  report: `<svg viewBox="0 0 200 200"><rect x="30" y="20" width="140" height="160" rx="10" fill="#fff" stroke="#34405a" stroke-width="6"/><rect x="45" y="35" width="110" height="26" rx="5" fill="#2a7de1"/><g stroke="#c9d1de" stroke-width="6" stroke-linecap="round"><path d="M50 80 H150"/><path d="M50 100 H150"/><path d="M50 120 H110"/></g><g transform="translate(60 135) scale(.32)">${CAR('#ff7a1a')}</g><g transform="translate(150 135) scale(-.32 .32)">${CAR('#2a7de1')}</g><text x="100" y="20" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="700" font-size="16" fill="#fff"></text></svg>`,
+  phone: `<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="88" fill="#2fa36b"/><g class="shake"><path d="M70 45 l25 22 -12 22 q15 30 40 45 l20 -14 25 22 -12 26 q-20 12 -50 -10 q-45 -30 -60 -75 q-5 -25 24 -38 z" fill="#fff"/></g></svg>`,
+  clock: `<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="88" fill="#fff" stroke="#34405a" stroke-width="8"/><g stroke="#34405a" stroke-width="6" stroke-linecap="round"><path d="M100 24 v12"/><path d="M176 100 h-12"/><path d="M100 176 v-12"/><path d="M24 100 h12"/></g><path d="M100 100 V50" stroke="#172033" stroke-width="9" stroke-linecap="round"/><path class="spin-slow" d="M100 100 L140 120" stroke="#ff7a1a" stroke-width="9" stroke-linecap="round"/><circle cx="100" cy="100" r="9" fill="#172033"/></svg>`,
+  key: `<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="88" fill="#ffd94a"/><g transform="rotate(-30 100 100)"><circle cx="65" cy="100" r="30" fill="none" stroke="#172033" stroke-width="16"/><rect x="88" y="92" width="85" height="16" rx="6" fill="#172033"/><rect x="150" y="100" width="12" height="24" rx="3" fill="#172033"/><rect x="128" y="100" width="12" height="20" rx="3" fill="#172033"/></g></svg>`
+};
+
+/* ---------- Abspiel-Logik ---------- */
+const $ = (id) => document.getElementById(id);
+const stage = $("stage"), app = $("app");
+const fill = (s) => s.replace(/\{(\w+)\}/g, (m, k) => CONFIG[k] ?? m);
+
+$("brand").textContent = CONFIG.company;
+$("signText").textContent = CONFIG.company.toUpperCase().slice(0, 18);
+$("agentName").textContent = CONFIG.agentName;
+$("customerName").textContent = CONFIG.customerName;
+$("endPhone").textContent = CONFIG.phone;
+$("startTitle").textContent = "Willkommen bei " + CONFIG.company;
+$("loopChk").checked = CONFIG.loop;
+
+const progress = $("progress"), nav = $("scenesNav");
+SCENES.forEach((s, i) => {
+  const seg = document.createElement("span"); seg.innerHTML = "<i></i>"; progress.appendChild(seg);
+  const b = document.createElement("button"); b.type = "button"; b.textContent = (i + 1) + " " + s.title;
+  b.addEventListener("click", () => { started = true; hideOverlays(); goScene(i); });
+  nav.appendChild(b);
+});
+
+let scene = 0, line = 0, started = false, paused = false, muted = false, token = 0, timer = null;
+let voice = null;
+const synth = window.speechSynthesis;
+
+function pickVoice() {
+  if (!synth) return;
+  const voices = synth.getVoices();
+  const de = voices.filter(v => /^de/i.test(v.lang));
+  voice = de.find(v => /google|natural|neural|premium|enhanced/i.test(v.name)) || de.find(v => /female|anna|katja|petra|vicki|marlene/i.test(v.name)) || de[0] || null;
+  $("voiceHint").textContent = voice
+    ? "Sprachausgabe: " + voice.name
+    : "Keine deutsche Stimme im Browser gefunden. Text wird ohne Ton mit Untertiteln abgespielt.";
+}
+if (synth) { pickVoice(); synth.onvoiceschanged = pickVoice; }
+
+function hideOverlays() { $("startOverlay").hidden = true; $("endOverlay").hidden = true; }
+function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
+function stopSpeech() { try { synth && synth.cancel(); } catch (e) {} if (typeof stopTrack === "function") stopTrack(); }
+
+function sizeUnits() {
+  const w = stage.getBoundingClientRect().width;
+  app.style.setProperty("--u", (w / 100) + "px");
+}
+window.addEventListener("resize", sizeUnits);
+new ResizeObserver(sizeUnits).observe(stage);
+sizeUnits();
+
+function renderScene(i) {
+  const s = SCENES[i];
+  $("chipNum").textContent = i + 1;
+  $("chipTitle").textContent = s.title;
+  const clip = $("clip");
+  if (s.video) {
+    if (clip.getAttribute("src") !== s.video) clip.setAttribute("src", s.video);
+    stage.classList.add("has-clip"); clip.currentTime = 0;
+    const p = clip.play(); p && p.catch && p.catch(() => {});
+  } else { stage.classList.remove("has-clip"); clip.pause(); clip.removeAttribute("src"); }
+  const prop = $("prop");
+  prop.classList.remove("show");
+  prop.innerHTML = PROPS[s.prop] || "";
+  requestAnimationFrame(() => requestAnimationFrame(() => prop.classList.add("show")));
+  progress.querySelectorAll("span").forEach((seg, k) => {
+    seg.classList.toggle("done", k < i);
+    seg.querySelector("i").style.width = k < i ? "100%" : "0";
+  });
+  nav.querySelectorAll("button").forEach((b, k) => b.setAttribute("aria-current", k === i ? "true" : "false"));
+  $("bubbleAgent").classList.remove("show"); $("bubbleCustomer").classList.remove("show");
+  $("agentFig").classList.remove("talking"); $("customerFig").classList.remove("talking");
+  $("subtitle").textContent = "";
+}
+
+function goScene(i) {
+  clearTimer(); stopSpeech(); token++;
+  if (i >= SCENES.length) { finish(); return; }
+  if (i < 0) i = 0;
+  scene = i; line = 0; renderScene(i);
+  if (!paused) playLine();
+}
+
+function playLine() {
+  clearTimer(); stopSpeech();
+  const my = ++token;
+  const s = SCENES[scene];
+  if (line >= s.lines.length) {
+    progress.children[scene].querySelector("i").style.width = "100%";
+    timer = setTimeout(() => { if (my === token) goScene(scene + 1); }, CONFIG.pauseAfterScene);
+    return;
+  }
+  const [who, raw] = s.lines[line];
+  const text = fill(raw);
+  const bubble = who === "agent" ? $("bubbleAgent") : $("bubbleCustomer");
+  const other = who === "agent" ? $("bubbleCustomer") : $("bubbleAgent");
+  const fig = who === "agent" ? $("agentFig") : $("customerFig");
+  const otherFig = who === "agent" ? $("customerFig") : $("agentFig");
+  other.classList.remove("show"); otherFig.classList.remove("talking");
+  bubble.querySelector(".text").textContent = text;
+  bubble.classList.add("show");
+  fig.classList.add("talking");
+  $("subtitle").textContent = text;
+  progress.children[scene].querySelector("i").style.width = Math.round((line / s.lines.length) * 100) + "%";
+
+  const done = () => {
+    if (my !== token) return;
+    fig.classList.remove("talking");
+    line++;
+    timer = setTimeout(() => { if (my === token) playLine(); }, CONFIG.pauseAfterLine);
+  };
+
+  if (s.audio && !muted && line === 0) {
+    playAudioTrack(s.audio, my, () => { if (my !== token) return; fig.classList.remove("talking"); line = s.lines.length; showRemainingBubbles(s); playLine(); });
+  } else if (s.audio && !muted) {
+    return; /* Tonspur läuft bereits, Sprechblasen wurden gesetzt */
+  } else if (!muted && synth && voice) {
+    speakSentences(text, my, done);
+  } else {
+    timer = setTimeout(done, 1200 + text.length * 60);
+  }
+}
+
+let track = null;
+function playAudioTrack(src, my, done) {
+  if (track) { track.pause(); track = null; }
+  track = new Audio(src);
+  track.onended = done; track.onerror = done;
+  const p = track.play(); p && p.catch && p.catch(done);
+}
+function showRemainingBubbles() {}
+function stopTrack() { if (track) { track.pause(); track = null; } }
+
+/* Lange Texte werden satzweise gesprochen, sonst bricht Chrome nach ca. 15 Sekunden ab. */
+function speakSentences(text, my, done) {
+  const parts = text.match(/[^.!?:]+[.!?:]*\s*/g) || [text];
+  let k = 0;
+  const next = () => {
+    if (my !== token) return;
+    if (k >= parts.length) { done(); return; }
+    const u = new SpeechSynthesisUtterance(parts[k++].trim());
+    u.lang = voice.lang; u.voice = voice; u.rate = CONFIG.speechRate; u.pitch = 1;
+    let guard = setTimeout(() => { u.onend = null; next(); }, 20000);
+    u.onend = () => { clearTimeout(guard); next(); };
+    u.onerror = () => { clearTimeout(guard); next(); };
+    synth.speak(u);
+  };
+  next();
+}
+
+function finish() {
+  clearTimer(); stopSpeech();
+  progress.querySelectorAll("span").forEach(seg => { seg.classList.add("done"); seg.querySelector("i").style.width = "100%"; });
+  if ($("loopChk").checked) { timer = setTimeout(() => goScene(0), 4000); $("endOverlay").hidden = false; return; }
+  $("endOverlay").hidden = false;
+}
+
+function start() { started = true; paused = false; hideOverlays(); updatePlayBtn(); goScene(0); }
+function togglePause() {
+  if (!started) { start(); return; }
+  paused = !paused; updatePlayBtn();
+  if (paused) { clearTimer(); stopSpeech(); token++; $("agentFig").classList.remove("talking"); $("customerFig").classList.remove("talking"); }
+  else { hideOverlays(); playLine(); }
+}
+function updatePlayBtn() { $("playBtn").innerHTML = (paused || !started ? "▶ Abspielen" : "⏸ Pause") + ' <span class="kbd">Leertaste</span>'; }
+function toggleMute() { muted = !muted; $("muteBtn").innerHTML = (muted ? "🔇 Stumm" : "🔊 Ton") + ' <span class="kbd">M</span>'; if (started && !paused) playLine(); }
+function toggleFullscreen() {
+  if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); return; }
+  const el = app; const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (req) { try { const p = req.call(el); p && p.catch && p.catch(() => {}); } catch (e) {} }
+}
+let uiTimer = null;
+function showUi() { app.classList.add("show-ui"); clearTimeout(uiTimer); uiTimer = setTimeout(() => app.classList.remove("show-ui"), 3000); }
+app.addEventListener("mousemove", showUi);
+document.addEventListener("fullscreenchange", () => { sizeUnits(); stage.focus(); });
+
+$("startBtn").addEventListener("click", start);
+$("replayBtn").addEventListener("click", start);
+$("playBtn").addEventListener("click", togglePause);
+$("prevBtn").addEventListener("click", () => { if (!started) start(); else goScene(scene - 1); });
+$("nextBtn").addEventListener("click", () => { if (!started) start(); else goScene(scene + 1); });
+$("restartBtn").addEventListener("click", start);
+$("muteBtn").addEventListener("click", toggleMute);
+$("fsBtn").addEventListener("click", toggleFullscreen);
+$("loopChk").addEventListener("change", () => { CONFIG.loop = $("loopChk").checked; });
+stage.addEventListener("click", (e) => { if (e.target.closest("button")) return; if (!started) start(); });
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") return;
+  showUi();
+  switch (e.key) {
+    case "ArrowRight": case "MediaTrackNext": e.preventDefault(); started ? goScene(scene + 1) : start(); break;
+    case "ArrowLeft": case "MediaTrackPrevious": e.preventDefault(); started ? goScene(scene - 1) : start(); break;
+    case " ": case "Enter": case "MediaPlayPause": if (e.target.tagName === "BUTTON" && e.key === "Enter") return; e.preventDefault(); togglePause(); break;
+    case "r": case "R": start(); break;
+    case "m": case "M": toggleMute(); break;
+    case "f": case "F": toggleFullscreen(); break;
+    case "Escape": break;
+  }
+});
+updatePlayBtn();
+window.addEventListener("beforeunload", stopSpeech);
+</script>
+</body>
+</html>
